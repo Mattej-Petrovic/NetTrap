@@ -15,11 +15,10 @@ Platform note: NetTrap is primarily intended and tested for Windows desktop use 
 - Runtime controls for Start All / Stop All, service bind host/port, and service fingerprints
 - JSON and CSV export with date/service filters
 
-## Screenshots
+## Screenshot
+<img width="1391" height="932" alt="Dashboard" src="https://github.com/user-attachments/assets/18e5de88-a1f1-4263-9bc8-9715dab07b54" />
 
-- Dashboard: `docs/screenshots/dashboard.png` (placeholder)
 
-Add your Dashboard screenshot at the path above or update this section to match your repo layout.
 
 ## GeoIP Database (`GeoLite2-City.mmdb`)
 
