@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetTrap Live Map</title>
+    <meta
+        http-equiv="Content-Security-Policy"
+        content="
+            default-src 'self';
+            script-src 'self';
+            style-src 'self';
+            img-src 'self' data: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com;
+            connect-src 'none';
+            font-src 'self' data:;
+            object-src 'none';
+            base-uri 'none';
+            form-action 'none';
+            frame-ancestors 'none';
+        "
+    >
+    <link
+        rel="stylesheet"
+        href="vendor/leaflet/leaflet.css"
+    >
+    <link rel="stylesheet" href="map.css">
+</head>
+<body>
+    <div id="map"></div>
+    <script src="vendor/leaflet/leaflet.js"></script>
+    <script src="map.js"></script>
+</body>
+</html>

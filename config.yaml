@@ -1,0 +1,33 @@
+services:
+  ssh:
+    enabled: true
+    host: "127.0.0.1"
+    port: 22
+    banner: "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.6"
+  http:
+    enabled: true
+    host: "127.0.0.1"
+    port: 80
+    server_header: "Apache/2.4.41 (Ubuntu)"
+    page_profile: "admin"
+    trust_proxy_headers: false
+    debug_proxy_resolution: false
+
+database:
+  path: "data/nettrap.db"
+
+logging:
+  json_dir: "data/logs"
+  level: "INFO"
+
+geoip:
+  database_path: "data/GeoLite2-City.mmdb"
+
+gui:
+  refresh_rate_ms: 1500
+  max_feed_items: 200
+  theme: "dark"
+
+export:
+  default_format: "json"
+  default_directory: "exports"

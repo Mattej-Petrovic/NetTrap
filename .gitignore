@@ -1,0 +1,50 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments and Python tooling
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+tests/
+
+# Application runtime data and exports
+data/
+exports/
+*.db
+*.db-shm
+*.db-wal
+*.jsonl
+*.log
+
+# Secrets, keys, and optional local binary databases
+*.key
+*.pem
+*.mmdb
+ssh_host_key
+
+# Build artifacts
+build/
+dist/
+
+# Local machine / secret environment files
+.env
+.env.*
+.python-version
+
+# Local temporary helper scripts
+.codex_tmp_*
