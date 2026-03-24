@@ -15,9 +15,18 @@ Platform note: NetTrap is primarily intended and tested for Windows desktop use 
 - Runtime controls for Start All / Stop All, service bind host/port, and service fingerprints
 - JSON and CSV export with date/service filters
 
-## Screenshot
-<img width="1391" height="932" alt="Dashboard" src="https://github.com/user-attachments/assets/18e5de88-a1f1-4263-9bc8-9715dab07b54" />
+## Screenshots
+<img width="1395" height="928" alt="1" src="https://github.com/user-attachments/assets/bbee9e5a-f5b9-4f74-9537-9b3e8baf148d" />
 
+<img width="1386" height="916" alt="2" src="https://github.com/user-attachments/assets/5cc5d47d-8212-4aba-accd-847edbb36fb8" />
+
+<img width="1403" height="921" alt="3" src="https://github.com/user-attachments/assets/cc49ad69-07e9-4480-b239-c77a1ea182a1" />
+
+<img width="1389" height="924" alt="4" src="https://github.com/user-attachments/assets/e5512305-e40b-446d-abd0-2b86efa1ca7f" />
+
+<img width="1390" height="925" alt="5" src="https://github.com/user-attachments/assets/f39d71e3-7ba8-4735-8887-28005e7a0782" />
+
+<img width="1388" height="921" alt="6" src="https://github.com/user-attachments/assets/ca00f3dd-2bb5-456f-8470-c2ed0285f15d" />
 
 
 ## GeoIP Database (`GeoLite2-City.mmdb`)
