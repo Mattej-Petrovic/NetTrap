@@ -6,9 +6,12 @@ Platform note: NetTrap is primarily intended and tested for Windows desktop use 
 
 ## Key Features
 
-- PyQt6 desktop UI with Dashboard, Live Map, Sessions, Analytics, Settings, and Export views
-- Fake SSH honeypot (Paramiko) with credential-attempt capture
-- Fake HTTP honeypot (aiohttp) with realistic login decoy pages and request logging
+- PyQt6 desktop UI with Dashboard, Live Map, Sessions, Analytics, Alerts, Settings, and Export views
+- Fake SSH honeypot (Paramiko) — captures password and public key auth attempts with key metadata
+- Fake HTTP honeypot (aiohttp) — realistic login decoy pages, 30+ scanned paths covered, captures form and JSON credentials across 19 common field name variants
+- All unknown GET paths redirect to the login page instead of returning 404, keeping bots engaged
+- AI Threat Analyst — connect your OpenAI, Google Gemini, or Anthropic Claude API key in Settings and get a per-session analysis (actor type, intent, severity, recommendations) with one click in the Sessions view
+- Automatic alert engine — fires on brute force (10+ auth attempts), rapid fire (5+ attempts in 30 s), path scanning (15+ distinct HTTP paths), and credential stuffing (same password from 3+ IPs); all visible in the Alerts view
 - SQLite storage (WAL mode) for sessions/events/alerts
 - JSONL append-only event logs for audit-friendly raw capture
 - GeoIP enrichment with Leaflet map markers in `QWebEngineView`
@@ -44,8 +47,8 @@ NetTrap uses MaxMind GeoLite2 City for IP geolocation enrichment.
 Important notes:
 
 - If `config.yaml` is missing, NetTrap recreates it from built-in defaults.
-- Default bind host is `127.0.0.1` (safe local default).
-- Use `0.0.0.0` only when you intentionally want exposure on all interfaces.
+- Default bind host is `0.0.0.0` (all interfaces). Use `127.0.0.1` for local-only testing.
+- Default ports are `2222` (SSH) and `8080` (HTTP) to avoid conflicts with system services. Port-forward your router's external 22/80 to these ports to catch real internet traffic.
 
 Main sections:
 
@@ -56,6 +59,7 @@ Main sections:
 - `geoip.database_path`: GeoLite2 DB path
 - `gui`: refresh rate and feed size
 - `export`: default format and output directory
+- `ai`: enabled, provider (`openai` / `gemini` / `claude`), api_key, model (leave blank for provider default)
 
 ## Runtime / Packaged File Behavior
 

@@ -86,7 +86,7 @@ class ExportView(QWidget):
         self.include_alerts = QCheckBox("Alerts")
         self.include_sessions.setChecked(True)
         self.include_events.setChecked(True)
-        self.include_alerts.setEnabled(False)
+        self.include_alerts.setChecked(True)
         include_row.addWidget(self.include_sessions)
         include_row.addWidget(self.include_events)
         include_row.addWidget(self.include_alerts)
@@ -139,6 +139,7 @@ class ExportView(QWidget):
             self.service_http,
             self.include_sessions,
             self.include_events,
+            self.include_alerts,
             self.json_radio,
             self.csv_radio,
         ):
@@ -199,13 +200,14 @@ class ExportView(QWidget):
         service = self._service_filter()
         sessions_count = self.db.get_total_sessions_count(service=service, after=after, before=before)
         events_count = self.db.get_total_events_count(service=service, after=after, before=before)
+        alerts_count = len(self.db.get_alerts(limit=10000, after=after, before=before))
 
         self.preview_label.setText(
-            f"Matching: {sessions_count:,} sessions | {events_count:,} events"
+            f"Matching: {sessions_count:,} sessions | {events_count:,} events | {alerts_count:,} alerts"
         )
-        enabled = (self.include_sessions.isChecked() or self.include_events.isChecked()) and (
-            sessions_count > 0 or events_count > 0
-        )
+        enabled = (
+            self.include_sessions.isChecked() or self.include_events.isChecked() or self.include_alerts.isChecked()
+        ) and (sessions_count > 0 or events_count > 0 or alerts_count > 0)
         self.export_button.setEnabled(enabled)
         self.status_label.setText("" if enabled else "No data matches filters")
 
@@ -214,11 +216,14 @@ class ExportView(QWidget):
         service = self._service_filter()
         sessions = self.db.export_sessions(service=service, after=after, before=before)
         events = self.db.export_events(service=service, after=after, before=before)
+        alerts = self.db.export_alerts(after=after, before=before)
 
         if not self.include_sessions.isChecked():
             sessions = []
         if not self.include_events.isChecked():
             events = []
+        if not self.include_alerts.isChecked():
+            alerts = None
 
         default_dir = Path(self.config["export"]["default_directory"])
         default_dir.mkdir(parents=True, exist_ok=True)
@@ -234,8 +239,8 @@ class ExportView(QWidget):
             return
 
         if self.json_radio.isChecked():
-            export_to_json(sessions, events, path)
+            export_to_json(sessions, events, path, alerts=alerts)
         else:
-            export_to_csv(sessions, events, path)
+            export_to_csv(sessions, events, path, alerts=alerts)
 
         self.status_label.setText(f"Exported to {path}")

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 
-from PyQt6.QtCore import QTimer, Qt
+from PyQt6.QtCore import QThread, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QPainter, QPen
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -11,12 +11,14 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPushButton,
     QScrollArea,
     QSplitter,
     QVBoxLayout,
     QWidget,
 )
 
+from nettrap.core import ai
 from nettrap.core.database import Database
 from nettrap.gui import theme
 from nettrap.gui.widgets.session_table import SessionTable
@@ -99,13 +101,39 @@ class TimelineEntry(QWidget):
         root.addLayout(text_block, 1)
 
 
+class _AIAnalysisWorker(QThread):
+    succeeded = pyqtSignal(str, str)
+    failed = pyqtSignal(str, str)
+
+    def __init__(self, session_id, provider, api_key, model, prompt, parent=None):
+        super().__init__(parent)
+        self._session_id = session_id
+        self._provider = provider
+        self._api_key = api_key
+        self._model = model
+        self._prompt = prompt
+
+    def run(self):
+        try:
+            result = ai.analyze(self._provider, self._api_key, self._model, self._prompt)
+        except ai.AIError as exc:
+            self.failed.emit(self._session_id, str(exc))
+        except Exception as exc:  # noqa: BLE001 - never let the worker crash silently
+            self.failed.emit(self._session_id, f"Unexpected error: {exc}")
+        else:
+            self.succeeded.emit(self._session_id, result)
+
+
 class SessionsView(QWidget):
-    def __init__(self, db_path: str, refresh_rate_ms: int, event_queue=None, parent=None):
+    def __init__(self, db_path: str, refresh_rate_ms: int, config=None, event_queue=None, parent=None):
         super().__init__(parent)
         del event_queue
         self.db = Database(db_path)
+        self.config = config or {}
         self._sessions_by_id: dict[str, dict] = {}
         self._current_session_id: str | None = None
+        self._ai_worker: _AIAnalysisWorker | None = None
+        self._ai_results: dict[str, str] = {}
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search IP, username, path")
@@ -165,6 +193,8 @@ class SessionsView(QWidget):
 
     def closeEvent(self, event):
         self.refresh_timer.stop()
+        if self._ai_worker is not None and self._ai_worker.isRunning():
+            self._ai_worker.wait(2000)
         self.db.close()
         super().closeEvent(event)
 
@@ -263,12 +293,35 @@ class SessionsView(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(8)
 
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
         self.detail_title = QLabel("SESSION DETAIL")
         self.detail_title.setStyleSheet(
             f"color: {theme.TEXT_PRIMARY}; font-size: 13px; font-weight: 700;"
         )
+        self.ai_button = QPushButton("Analyze with AI")
+        self.ai_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.ai_button.setStyleSheet(
+            f"background: {theme.ACCENT_PRIMARY}; color: {theme.BACKGROUND_MAIN}; "
+            f"border: none; font-weight: 700; padding: 6px 14px;"
+        )
+        self.ai_button.clicked.connect(self._analyze_current_session)
+        self.ai_button.hide()
+        title_row.addWidget(self.detail_title)
+        title_row.addStretch(1)
+        title_row.addWidget(self.ai_button)
+
         self.detail_summary = QLabel("")
         self.detail_summary.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: 12px;")
+
+        self.ai_result = QLabel("")
+        self.ai_result.setWordWrap(True)
+        self.ai_result.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.ai_result.setStyleSheet(
+            f"color: {theme.TEXT_PRIMARY}; font-size: 12px; background: {theme.BACKGROUND_MAIN}; "
+            f"border: 1px solid {theme.BORDER_DIVIDERS}; border-radius: 6px; padding: 10px;"
+        )
+        self.ai_result.hide()
 
         timeline_header = QLabel("TIMELINE")
         timeline_header.setStyleSheet(
@@ -285,8 +338,9 @@ class SessionsView(QWidget):
         self.timeline_layout.addStretch(1)
         self.timeline_area.setWidget(self.timeline_container)
 
-        layout.addWidget(self.detail_title)
+        layout.addLayout(title_row)
         layout.addWidget(self.detail_summary)
+        layout.addWidget(self.ai_result)
         layout.addSpacing(4)
         layout.addWidget(timeline_header)
         layout.addWidget(self.timeline_area, 1)
@@ -304,6 +358,7 @@ class SessionsView(QWidget):
 
         self.detail_panel.show()
         events = self.db.get_session_events(session_id)
+        self._refresh_ai_controls(session_id)
         self.detail_title.setText(f"SESSION DETAIL: {session_id}")
         self.detail_summary.setText(
             "IP: {ip} | Country: {country} | Duration: {duration} | Evts: {count}".format(
@@ -371,6 +426,83 @@ class SessionsView(QWidget):
                     show_bottom=index < len(entries) - 1,
                 ),
             )
+
+    def _refresh_ai_controls(self, session_id: str):
+        ai_config = self.config.get("ai", {})
+        configured = ai.is_configured(ai_config)
+        analyzing = self._ai_worker is not None and self._ai_worker.isRunning()
+
+        self.ai_button.setVisible(configured)
+        if not configured:
+            self.ai_result.hide()
+            return
+
+        if analyzing and self._ai_worker._session_id == session_id:
+            self.ai_button.setEnabled(False)
+            self.ai_button.setText("Analyzing...")
+        else:
+            self.ai_button.setEnabled(not analyzing)
+            self.ai_button.setText("Analyze with AI")
+
+        cached = self._ai_results.get(session_id)
+        if cached:
+            self.ai_result.setText(cached)
+            self.ai_result.show()
+        else:
+            self.ai_result.hide()
+
+    def _analyze_current_session(self):
+        session_id = self._current_session_id
+        if not session_id:
+            return
+        if self._ai_worker is not None and self._ai_worker.isRunning():
+            return
+
+        ai_config = self.config.get("ai", {})
+        if not ai.is_configured(ai_config):
+            return
+
+        session = self._sessions_by_id.get(session_id)
+        if not session:
+            return
+        events = self.db.get_session_events(session_id)
+        prompt = ai.build_session_prompt(session, events)
+
+        self.ai_result.setText("Contacting AI provider, please wait...")
+        self.ai_result.show()
+        self.ai_button.setEnabled(False)
+        self.ai_button.setText("Analyzing...")
+
+        worker = _AIAnalysisWorker(
+            session_id,
+            str(ai_config.get("provider", "openai")),
+            str(ai_config.get("api_key", "")),
+            str(ai_config.get("model", "")),
+            prompt,
+            parent=self,
+        )
+        worker.succeeded.connect(self._on_ai_succeeded)
+        worker.failed.connect(self._on_ai_failed)
+        worker.finished.connect(self._on_ai_finished)
+        self._ai_worker = worker
+        worker.start()
+
+    def _on_ai_succeeded(self, session_id: str, result: str):
+        self._ai_results[session_id] = result
+        if self._current_session_id == session_id:
+            self.ai_result.setText(result)
+            self.ai_result.show()
+
+    def _on_ai_failed(self, session_id: str, message: str):
+        text = f"AI analysis failed: {message}"
+        if self._current_session_id == session_id:
+            self.ai_result.setText(text)
+            self.ai_result.show()
+
+    def _on_ai_finished(self):
+        self._ai_worker = None
+        self.ai_button.setEnabled(True)
+        self.ai_button.setText("Analyze with AI")
 
     @staticmethod
     def _time_only(timestamp: str | None) -> str:

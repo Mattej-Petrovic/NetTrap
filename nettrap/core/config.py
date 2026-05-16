@@ -17,14 +17,14 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "services": {
         "ssh": {
             "enabled": True,
-            "host": "127.0.0.1",
-            "port": 22,
+            "host": "0.0.0.0",
+            "port": 2222,
             "banner": "SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.6",
         },
         "http": {
             "enabled": True,
-            "host": "127.0.0.1",
-            "port": 80,
+            "host": "0.0.0.0",
+            "port": 8080,
             "server_header": "Apache/2.4.41 (Ubuntu)",
             "page_profile": "admin",
             "trust_proxy_headers": False,
@@ -36,6 +36,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "geoip": {"database_path": "data/GeoLite2-City.mmdb"},
     "gui": {"refresh_rate_ms": 1500, "max_feed_items": 200, "theme": "dark"},
     "export": {"default_format": "json", "default_directory": "exports"},
+    "ai": {
+        "enabled": False,
+        "provider": "openai",
+        "api_key": "",
+        "model": "",
+    },
 }
 
 _PATH_KEYS = {"path", "json_dir", "database_path", "default_directory"}

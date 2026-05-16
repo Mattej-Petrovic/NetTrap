@@ -22,7 +22,40 @@ except ImportError:
 from nettrap.honeypots.base import BaseHoneypot
 from nettrap.utils.ip_utils import resolve_bind_host
 
-LOGIN_PATHS = frozenset({"/", "/admin", "/login", "/wp-login.php"})
+LOGIN_PATHS = frozenset({
+    "/",
+    "/admin",
+    "/admin/",
+    "/login",
+    "/login.php",
+    "/login.html",
+    "/wp-login.php",
+    "/wp-admin",
+    "/wp-admin/",
+    "/administrator",
+    "/administrator/",
+    "/administrator/index.php",
+    "/phpmyadmin",
+    "/phpmyadmin/",
+    "/pma",
+    "/manager/html",
+    "/manager/",
+    "/cgi-bin/luci",
+    "/index.php",
+    "/index.html",
+    "/user/login",
+    "/auth/login",
+    "/signin",
+    "/sign-in",
+    "/portal",
+    "/webadmin",
+    "/webadmin/",
+    "/panel",
+    "/controlpanel",
+    "/xmlrpc.php",
+    "/config.php",
+    "/setup.php",
+})
 LOGIN_PAGE_PROFILES: dict[str, dict[str, str]] = {
     "admin": {
         "window_title": "Secure Sign-In",
@@ -328,17 +361,59 @@ class HTTPHoneypot(BaseHoneypot):
             },
         )
 
-    @staticmethod
-    def _extract_login_attempt(body_text: str | None) -> tuple[str, str] | None:
+    USERNAME_KEYS = (
+        "username",
+        "user",
+        "email",
+        "login",
+        "log",
+        "uname",
+        "userid",
+        "user_login",
+        "j_username",
+        "account",
+        "name",
+    )
+    PASSWORD_KEYS = (
+        "password",
+        "pass",
+        "passwd",
+        "pwd",
+        "pw",
+        "j_password",
+        "passwort",
+        "secret",
+    )
+
+    @classmethod
+    def _extract_login_attempt(
+        cls, body_text: str | None, content_type: str | None = None
+    ) -> tuple[str, str] | None:
         if not body_text:
             return None
 
-        parsed = parse_qs(body_text, keep_blank_values=True)
-        username_keys = ("username", "user", "email", "login")
-        password_keys = ("password", "pass")
+        flat: dict[str, str] = {}
+        ctype = (content_type or "").lower()
+        if "application/json" in ctype:
+            try:
+                parsed_json = json.loads(body_text)
+            except (ValueError, TypeError):
+                parsed_json = None
+            if isinstance(parsed_json, dict):
+                for key, value in parsed_json.items():
+                    if isinstance(value, (str, int, float, bool)):
+                        flat[str(key).lower()] = str(value)
+        if not flat:
+            parsed = parse_qs(body_text, keep_blank_values=True)
+            for key, values in parsed.items():
+                if values:
+                    flat[key.lower()] = values[0]
 
-        username = next((parsed.get(key, [""])[0].strip() for key in username_keys if key in parsed), "")
-        password = next((parsed.get(key, [""])[0] for key in password_keys if key in parsed), "")
+        if not flat:
+            return None
+
+        username = next((flat[key].strip() for key in cls.USERNAME_KEYS if key in flat), "")
+        password = next((flat[key] for key in cls.PASSWORD_KEYS if key in flat), "")
         if not username and not password:
             return None
         return username, password
@@ -374,13 +449,22 @@ class HTTPHoneypot(BaseHoneypot):
                 **proxy_diagnostics,
             }
         )
-        login_attempt = self._extract_login_attempt(body_text)
+        login_attempt = self._extract_login_attempt(
+            body_text, request.headers.get("Content-Type")
+        )
         if request.method.upper() == "POST" and login_attempt is not None:
             self._record_login_attempt(session.id, request, *login_attempt)
 
-        if request.method.upper() == "GET" and request.path in LOGIN_PATHS:
-            response = web.Response(text=self._fake_login_page(request.path), content_type="text/html")
-        elif request.method.upper() == "POST" and request.path in LOGIN_PATHS:
+        method = request.method.upper()
+        if method == "GET":
+            if request.path in LOGIN_PATHS:
+                response = web.Response(text=self._fake_login_page(request.path), content_type="text/html")
+            else:
+                response = web.Response(
+                    status=302,
+                    headers={"Location": "/"},
+                )
+        elif method == "POST":
             username = login_attempt[0] if login_attempt is not None else ""
             response = web.Response(
                 text=self._fake_login_page(
@@ -392,9 +476,8 @@ class HTTPHoneypot(BaseHoneypot):
             )
         else:
             response = web.Response(
-                status=404,
-                text=self._apache_404_page(request.path),
-                content_type="text/html",
+                status=405,
+                text="Method Not Allowed",
             )
 
         response.headers["Server"] = self.server_header
@@ -570,10 +653,11 @@ class HTTPHoneypot(BaseHoneypot):
         )
 
     def _apache_404_page(self, path: str) -> str:
+        safe_path = html.escape(path)
         return (
             "<html><head><title>404 Not Found</title></head><body><h1>Not Found</h1>"
-            f"<p>The requested URL {path} was not found on this server.</p>"
-            f"<hr><address>Apache/2.4.41 (Ubuntu) Server at localhost Port {self.port}</address>"
+            f"<p>The requested URL {safe_path} was not found on this server.</p>"
+            f"<hr><address>{html.escape(self.server_header)}</address>"
             "</body></html>"
         )
 

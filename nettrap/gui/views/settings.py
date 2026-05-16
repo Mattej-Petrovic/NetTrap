@@ -5,6 +5,7 @@ import copy
 from PyQt6.QtCore import QEasingCurve, QPropertyAnimation, QRectF, Qt, pyqtProperty
 from PyQt6.QtGui import QColor, QPainter
 from PyQt6.QtWidgets import (
+    QComboBox,
     QFileDialog,
     QFrame,
     QGridLayout,
@@ -18,6 +19,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from nettrap.core import ai
 from nettrap.core.config import save_config
 from nettrap.core.database import Database
 from nettrap.core.geoip import GeoIPLookup
@@ -123,9 +125,6 @@ class SettingsView(QWidget):
         root.addLayout(header)
 
         root.addWidget(SectionHeader("Honeypot Services"))
-        services_grid = QGridLayout()
-        services_grid.setHorizontalSpacing(12)
-        services_grid.setVerticalSpacing(12)
 
         self.ssh_enabled = ToggleSwitch()
         self.ssh_host = QLineEdit()
@@ -136,45 +135,43 @@ class SettingsView(QWidget):
         self.http_port = QLineEdit()
         self.http_header = QLineEdit()
 
+        host_tip = (
+            "Bind host: 0.0.0.0 = all interfaces (required to catch real attacks), "
+            "127.0.0.1 = local testing only."
+        )
         for field in (self.ssh_host, self.http_host):
-            field.setPlaceholderText("127.0.0.1")
-            field.setToolTip(
-                "Bind host (default 127.0.0.1): use localhost for local-only testing, "
-                "a LAN IPv4 address for one interface, or 0.0.0.0 for all interfaces."
-            )
+            field.setPlaceholderText("0.0.0.0")
+            field.setToolTip(host_tip)
+        for field in (self.ssh_port, self.http_port):
+            field.setFixedWidth(72)
 
-        self._add_service_row(services_grid, 0, "SSH Honeypot", self.ssh_enabled, self.ssh_host, self.ssh_port)
-        ssh_banner_label = QLabel("SSH Identification Banner:")
-        ssh_banner_label.setToolTip("Value sent as SSH server identification during handshake.")
-        self.ssh_banner.setToolTip(
-            "Presented SSH server banner string. This affects realism only and does not enable real SSH access."
-        )
-        services_grid.addWidget(ssh_banner_label, 1, 0)
-        services_grid.addWidget(self.ssh_banner, 1, 1, 1, 5)
-        ssh_banner_help = QLabel("Displayed to SSH clients as the server identification string.")
-        ssh_banner_help.setWordWrap(True)
-        ssh_banner_help.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: 11px;")
-        services_grid.addWidget(ssh_banner_help, 2, 0, 1, 6)
-        self._add_service_row(services_grid, 3, "HTTP Honeypot", self.http_enabled, self.http_host, self.http_port)
-        http_header_label = QLabel("HTTP Server Header:")
-        http_header_label.setToolTip("Value returned in the HTTP Server response header.")
-        self.http_header.setToolTip(
-            "Presented in the HTTP 'Server' response header to emulate common web server fingerprints."
-        )
-        services_grid.addWidget(http_header_label, 4, 0)
-        services_grid.addWidget(self.http_header, 4, 1, 1, 5)
-        http_header_help = QLabel("Returned in HTTP responses as the Server header fingerprint.")
-        http_header_help.setWordWrap(True)
-        http_header_help.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: 11px;")
-        services_grid.addWidget(http_header_help, 5, 0, 1, 6)
-        host_help = QLabel(
-            "Bind host examples: 127.0.0.1 (safe local default), a LAN IPv4 address for one interface, "
-            "or 0.0.0.0 to expose on all interfaces."
-        )
+        services_layout = QVBoxLayout()
+        services_layout.setSpacing(8)
+
+        services_layout.addLayout(self._service_row("SSH Honeypot", self.ssh_enabled, self.ssh_host, self.ssh_port))
+
+        ssh_banner_row = QHBoxLayout()
+        ssh_banner_lbl = QLabel("SSH Banner:")
+        ssh_banner_lbl.setFixedWidth(140)
+        ssh_banner_row.addWidget(ssh_banner_lbl)
+        ssh_banner_row.addWidget(self.ssh_banner, 1)
+        services_layout.addLayout(ssh_banner_row)
+
+        services_layout.addLayout(self._service_row("HTTP Honeypot", self.http_enabled, self.http_host, self.http_port))
+
+        http_header_row = QHBoxLayout()
+        http_header_lbl = QLabel("HTTP Server Header:")
+        http_header_lbl.setFixedWidth(140)
+        http_header_row.addWidget(http_header_lbl)
+        http_header_row.addWidget(self.http_header, 1)
+        services_layout.addLayout(http_header_row)
+
+        host_help = QLabel("Use 0.0.0.0 to catch real attacks (all interfaces). 127.0.0.1 = local testing only.")
         host_help.setWordWrap(True)
         host_help.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: 11px;")
-        services_grid.addWidget(host_help, 6, 0, 1, 6)
-        root.addLayout(services_grid)
+        services_layout.addWidget(host_help)
+
+        root.addLayout(services_layout)
 
         root.addWidget(SectionHeader("GeoIP"))
         geo_grid = QGridLayout()
@@ -216,6 +213,41 @@ class SettingsView(QWidget):
         display_grid.addWidget(self.max_feed_items, 1, 1)
         root.addLayout(display_grid)
 
+        root.addWidget(SectionHeader("AI Threat Analyst"))
+        ai_grid = QGridLayout()
+        ai_grid.setHorizontalSpacing(12)
+        ai_grid.setVerticalSpacing(12)
+
+        self.ai_enabled = ToggleSwitch()
+        self.ai_provider = QComboBox()
+        for provider_key in ai.PROVIDERS:
+            self.ai_provider.addItem(ai.PROVIDER_LABELS[provider_key], provider_key)
+        self.ai_api_key = QLineEdit()
+        self.ai_api_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.ai_api_key.setPlaceholderText("Paste your API key")
+        self.ai_model = QLineEdit()
+
+        self.ai_provider.currentIndexChanged.connect(self._update_ai_model_placeholder)
+
+        ai_grid.addWidget(QLabel("Enable AI analysis:"), 0, 0)
+        ai_grid.addWidget(self.ai_enabled, 0, 1)
+        ai_grid.addWidget(QLabel("Provider:"), 1, 0)
+        ai_grid.addWidget(self.ai_provider, 1, 1, 1, 2)
+        ai_grid.addWidget(QLabel("API key:"), 2, 0)
+        ai_grid.addWidget(self.ai_api_key, 2, 1, 1, 2)
+        ai_grid.addWidget(QLabel("Model:"), 3, 0)
+        ai_grid.addWidget(self.ai_model, 3, 1, 1, 2)
+        ai_help = QLabel(
+            "When enabled, the Sessions view shows an 'Analyze with AI' button that "
+            "sends the selected session's capture data to your chosen provider. "
+            "Leave Model blank to use the provider default. The API key is stored "
+            "locally in config.yaml."
+        )
+        ai_help.setWordWrap(True)
+        ai_help.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: 11px;")
+        ai_grid.addWidget(ai_help, 4, 0, 1, 3)
+        root.addLayout(ai_grid)
+
         root.addWidget(SectionHeader("Danger Zone"))
         danger_row = QHBoxLayout()
         self.clear_db_button = QPushButton("Clear Database")
@@ -236,21 +268,26 @@ class SettingsView(QWidget):
         self.db.close()
         super().closeEvent(event)
 
-    def _add_service_row(
+    def _service_row(
         self,
-        grid,
-        row: int,
         label_text: str,
         toggle: ToggleSwitch,
         host_input: QLineEdit,
         port_input: QLineEdit,
-    ):
-        grid.addWidget(QLabel(label_text), row, 0)
-        grid.addWidget(toggle, row, 1)
-        grid.addWidget(QLabel("Host:"), row, 2)
-        grid.addWidget(host_input, row, 3)
-        grid.addWidget(QLabel("Port:"), row, 4)
-        grid.addWidget(port_input, row, 5)
+    ) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        svc_label = QLabel(label_text)
+        svc_label.setFixedWidth(140)
+        row.addWidget(svc_label)
+        row.addWidget(toggle)
+        row.addSpacing(8)
+        row.addWidget(QLabel("Host:"))
+        row.addWidget(host_input, 1)
+        row.addSpacing(4)
+        row.addWidget(QLabel("Port:"))
+        row.addWidget(port_input)
+        return row
 
     def _load_from_config(self):
         self.ssh_enabled.setChecked(bool(self.config["services"]["ssh"]["enabled"]))
@@ -268,6 +305,21 @@ class SettingsView(QWidget):
         self.max_feed_items.setText(str(self.config["gui"]["max_feed_items"]))
         self._update_refresh_label(self.refresh_slider.value())
         self._update_geoip_status()
+
+        ai_config = self.config.get("ai", {})
+        self.ai_enabled.setChecked(bool(ai_config.get("enabled", False)))
+        self.ai_enabled.set_offset(20.0 if self.ai_enabled.isChecked() else 0.0)
+        provider = str(ai_config.get("provider", "openai"))
+        provider_index = self.ai_provider.findData(provider)
+        self.ai_provider.setCurrentIndex(provider_index if provider_index >= 0 else 0)
+        self.ai_api_key.setText(str(ai_config.get("api_key", "")))
+        self.ai_model.setText(str(ai_config.get("model", "")))
+        self._update_ai_model_placeholder()
+
+    def _update_ai_model_placeholder(self):
+        provider = self.ai_provider.currentData() or "openai"
+        default_model = ai.DEFAULT_MODELS.get(provider, "")
+        self.ai_model.setPlaceholderText(f"Default: {default_model}" if default_model else "")
 
     def _browse_geoip(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -335,6 +387,11 @@ class SettingsView(QWidget):
         new_config["geoip"]["database_path"] = self.geoip_path.text().strip()
         new_config["gui"]["refresh_rate_ms"] = int(self.refresh_slider.value())
         new_config["gui"]["max_feed_items"] = max_feed_items
+        ai_section = new_config.setdefault("ai", {})
+        ai_section["enabled"] = self.ai_enabled.isChecked()
+        ai_section["provider"] = self.ai_provider.currentData() or "openai"
+        ai_section["api_key"] = self.ai_api_key.text().strip()
+        ai_section["model"] = self.ai_model.text().strip()
 
         restart_required = self._service_restart_required(previous, new_config)
         restart_now = False

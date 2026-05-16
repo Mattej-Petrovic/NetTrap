@@ -13,7 +13,7 @@ except ImportError:
     UTC = timezone.utc
 
 
-def export_to_json(sessions: list, events: list, filepath: str):
+def export_to_json(sessions: list, events: list, filepath: str, alerts: list | None = None):
     event_map: dict[str, list] = {}
     for event in events:
         event_map.setdefault(event.get("session_id"), []).append(event)
@@ -22,6 +22,7 @@ def export_to_json(sessions: list, events: list, filepath: str):
         "exported_at": datetime.now(UTC).isoformat(),
         "total_sessions": len(sessions),
         "total_events": len(events),
+        "total_alerts": len(alerts) if alerts is not None else 0,
         "sessions": [],
     }
 
@@ -30,13 +31,16 @@ def export_to_json(sessions: list, events: list, filepath: str):
         row["events"] = event_map.get(session.get("id"), [])
         payload["sessions"].append(row)
 
+    if alerts is not None:
+        payload["alerts"] = alerts
+
     path = Path(filepath)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, ensure_ascii=False, indent=2)
 
 
-def export_to_csv(sessions: list, events: list, filepath: str):
+def export_to_csv(sessions: list, events: list, filepath: str, alerts: list | None = None):
     base_path = Path(filepath)
     base_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -81,3 +85,12 @@ def export_to_csv(sessions: list, events: list, filepath: str):
             if isinstance(row.get("data"), dict):
                 row["data"] = json.dumps(row["data"], ensure_ascii=False)
             writer.writerow(row)
+
+    if alerts:
+        alert_columns = ["id", "session_id", "event_id", "timestamp", "alert_type", "severity", "message", "source_ip", "service"]
+        alerts_path = base_path.with_name(f"{base_path.name}_alerts.csv")
+        with alerts_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=alert_columns)
+            writer.writeheader()
+            for alert in alerts:
+                writer.writerow({column: alert.get(column) for column in alert_columns})

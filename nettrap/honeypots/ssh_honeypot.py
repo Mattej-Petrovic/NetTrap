@@ -23,7 +23,25 @@ class _SSHServer(paramiko.ServerInterface):
         self.honeypot.log_event(
             self.session.id,
             "auth_attempt",
-            {"username": username, "password": password},
+            {"username": username, "password": password, "method": "password"},
+        )
+        if self.auth_attempts >= self.honeypot.max_auth_attempts:
+            self.disconnect_requested.set()
+        return paramiko.AUTH_FAILED
+
+    def check_auth_publickey(self, username, key):
+        self.auth_attempts += 1
+        self.honeypot.log_event(
+            self.session.id,
+            "auth_attempt",
+            {
+                "username": username,
+                "password": "",
+                "method": "publickey",
+                "key_type": key.get_name(),
+                "key_fingerprint": key.get_fingerprint().hex(),
+                "key_bits": key.get_bits(),
+            },
         )
         if self.auth_attempts >= self.honeypot.max_auth_attempts:
             self.disconnect_requested.set()
@@ -33,7 +51,7 @@ class _SSHServer(paramiko.ServerInterface):
         return paramiko.OPEN_SUCCEEDED
 
     def get_allowed_auths(self, username):
-        return "password"
+        return "password,publickey"
 
 
 class SSHHoneypot(BaseHoneypot):

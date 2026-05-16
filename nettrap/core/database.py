@@ -278,9 +278,11 @@ class Database:
         counts: dict[str, int] = {}
         for row in rows:
             payload = json.loads(row["data"])
-            username = payload.get("username")
-            password = payload.get("password")
-            if username is None and password is None:
+            if payload.get("method") == "publickey":
+                continue
+            username = payload.get("username") or ""
+            password = payload.get("password") or ""
+            if not username and not password:
                 continue
             key = f"{username}:{password}"
             counts[key] = counts.get(key, 0) + 1
@@ -361,6 +363,62 @@ class Database:
     def get_alerts_count(self):
         row = self.conn.execute("SELECT COUNT(*) AS total FROM alerts").fetchone()
         return row["total"]
+
+    def get_alerts(self, limit=200, offset=0, severity=None, after=None, before=None):
+        query = """
+            SELECT a.*, s.source_ip, s.service
+            FROM alerts AS a
+            LEFT JOIN sessions AS s ON s.id = a.session_id
+        """
+        params: list = []
+        conditions: list[str] = []
+        if severity:
+            conditions.append("a.severity = ?")
+            params.append(severity)
+        if after:
+            conditions.append("a.timestamp >= ?")
+            params.append(after)
+        if before:
+            conditions.append("a.timestamp <= ?")
+            params.append(before)
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY a.timestamp DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+        rows = self._fetch_rows(query, tuple(params))
+        for row in rows:
+            if row.get("data"):
+                try:
+                    row["data"] = json.loads(row["data"])
+                except (ValueError, TypeError):
+                    pass
+        return rows
+
+    def export_alerts(self, after=None, before=None):
+        query = """
+            SELECT a.*, s.source_ip, s.service
+            FROM alerts AS a
+            LEFT JOIN sessions AS s ON s.id = a.session_id
+        """
+        params: list = []
+        conditions: list[str] = []
+        if after:
+            conditions.append("a.timestamp >= ?")
+            params.append(after)
+        if before:
+            conditions.append("a.timestamp <= ?")
+            params.append(before)
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY a.timestamp DESC"
+        rows = self._fetch_rows(query, tuple(params))
+        for row in rows:
+            if row.get("data"):
+                try:
+                    row["data"] = json.loads(row["data"])
+                except (ValueError, TypeError):
+                    pass
+        return rows
 
     def get_total_events_count(self, service=None, after=None, before=None):
         query = """

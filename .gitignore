@@ -48,3 +48,7 @@ dist/
 
 # Local temporary helper scripts
 .codex_tmp_*
+
+# Other
+.claude/
+CLAUDE.md

@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBo
 
 from nettrap.core.geoip import GeoIPLookup
 from nettrap.gui import theme
+from nettrap.gui.views.alerts import AlertsView
 from nettrap.gui.views.analytics import AnalyticsView
 from nettrap.gui.views.dashboard import DashboardView
 from nettrap.gui.views.export import ExportView
@@ -88,13 +89,14 @@ class MainWindow(QMainWindow):
             ("Live Map", 1),
             ("Sessions", 2),
             ("Analytics", 3),
+            ("Alerts", 4),
         ):
             layout.addWidget(self._nav_button(text, index))
 
         layout.addSpacing(12)
         layout.addWidget(self._divider())
 
-        for text, index in (("Settings", 4), ("Export", 5)):
+        for text, index in (("Settings", 5), ("Export", 6)):
             layout.addWidget(self._nav_button(text, index))
 
         layout.addSpacing(12)
@@ -124,8 +126,9 @@ class MainWindow(QMainWindow):
             self.max_feed_items,
         )
         self.live_map_view = LiveMapView(self.db_path, self.config)
-        self.sessions_view = SessionsView(self.db_path, self.refresh_rate_ms, None)
+        self.sessions_view = SessionsView(self.db_path, self.refresh_rate_ms, self.config)
         self.analytics_view = AnalyticsView(self.db_path, self.refresh_rate_ms)
+        self.alerts_view = AlertsView(self.db_path, self.refresh_rate_ms)
         self.settings_view = SettingsView(
             self.db_path,
             self.config,
@@ -140,6 +143,7 @@ class MainWindow(QMainWindow):
             self.live_map_view,
             self.sessions_view,
             self.analytics_view,
+            self.alerts_view,
             self.settings_view,
             self.export_view,
         ):
@@ -258,6 +262,7 @@ class MainWindow(QMainWindow):
         self.dashboard_view.refresh_timer.setInterval(self.refresh_rate_ms)
         self.dashboard_view.feed.max_items = self.max_feed_items
         self.sessions_view.refresh_timer.setInterval(self.refresh_rate_ms)
+        self.sessions_view.config = new_config
         self.analytics_view.refresh_timer.setInterval(self.refresh_rate_ms)
         self.live_map_view.refresh_timer.setInterval(self.refresh_rate_ms)
         self.live_map_view.config = new_config
@@ -278,6 +283,7 @@ class MainWindow(QMainWindow):
         self.dashboard_view.refresh_metrics()
         self.sessions_view.refresh()
         self.analytics_view.refresh()
+        self.alerts_view.refresh()
         self.live_map_view.refresh_map()
         self.export_view.refresh_preview()
 
